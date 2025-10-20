@@ -6,7 +6,7 @@ from app.rag.vector_store import VectorStore
 # Initialize vector store
 store = VectorStore()
 
-query = "When is the best time to plant maize in Kenya?"
+query = "When is the best time to plant maize in Ethiopia?"
 results = store.search(query=query, n_results=3)
 
 print("\n🔍 Query:", query)

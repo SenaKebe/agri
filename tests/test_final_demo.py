@@ -65,7 +65,7 @@ def final_demo():
     
     demo_questions = [
         {
-            "question": "What are the optimal planting times for maize in Kenya?",
+            "question": "What are the optimal planting times for maize in Ethiopia?",
             "description": "Agronomist-only question"
         },
         {
@@ -86,7 +86,7 @@ def final_demo():
             start_time = time.time()
             chat_data = {
                 "message": demo['question'],
-                "location": "Central Kenya",
+                "location": "Central Ethiopia",
                 "crop_type": "maize"
             }
             response = requests.post(f"{base_url}/api/v1/chat", json=chat_data, timeout=30)

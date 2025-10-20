@@ -12,7 +12,7 @@ def test_simple_weather():
     
     try:
         response = requests.post(
-            f"{base_url}/api/v1/workflows/simple-weather-alert?location=Central+Kenya",
+            f"{base_url}/api/v1/workflows/simple-weather-alert?location=Central+Ethiopia",
             timeout=10
         )
         

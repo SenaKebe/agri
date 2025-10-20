@@ -26,7 +26,7 @@ def test_rag_system():
         
         # Test RAG-enhanced questions
         test_questions = [
-            "When should I plant maize in Central Kenya?",
+            "When should I plant maize in Central Ethiopia?",
             "How do I control maize stalk borer?",
             "What fertilizer should I use for maize?",
             "How to manage fall armyworm in my maize farm?"
@@ -36,7 +36,7 @@ def test_rag_system():
             print(f"\n🌱 Testing: {question}")
             chat_data = {
                 "message": question,
-                "location": "Central Kenya",
+                "location": "Central Ethiopia",
                 "crop_type": "maize"
             }
             response = requests.post(f"{base_url}/api/v1/chat", json=chat_data)

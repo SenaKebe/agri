@@ -19,8 +19,8 @@ def test_final():
         # Test chat with agricultural question
         print("\n2. Testing agricultural question...")
         chat_data = {
-            "message": "When is the best time to plant maize in Central Kenya?",
-            "location": "Central Kenya",
+            "message": "When is the best time to plant maize in Central Ethiopia?",
+            "location": "Central Ethiopia",
             "crop_type": "maize"
         }
         response = requests.post(f"{base_url}/api/v1/chat", json=chat_data, timeout=30)
@@ -40,7 +40,7 @@ def test_final():
         print("\n3. Testing pest control question...")
         pest_data = {
             "message": "How do I control maize stalk borer?",
-            "location": "Western Kenya", 
+            "location": "Western Ethiopia", 
             "crop_type": "maize"
         }
         pest_response = requests.post(f"{base_url}/api/v1/chat", json=pest_data, timeout=30)

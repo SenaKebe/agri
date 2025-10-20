@@ -39,8 +39,8 @@ def test_fix():
         # Test a simple chat
         print("6. Testing chat with RAG...")
         chat_data = {
-            "message": "When to plant maize in Kenya?",
-            "location": "Central Kenya",
+            "message": "When to plant maize in Ethiopia?",
+            "location": "Central Ethiopia",
             "crop_type": "maize"
         }
         chat_response = requests.post(f"{base_url}/api/v1/chat", json=chat_data)

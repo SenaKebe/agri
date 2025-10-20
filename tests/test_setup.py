@@ -28,8 +28,8 @@ def test_api():
         # Test chat endpoint with agricultural question
         print("\n🧪 Testing Agronomist Agent...")
         chat_data = {
-            "message": "When is the best time to plant maize in Central Kenya?",
-            "location": "Central Kenya",
+            "message": "When is the best time to plant maize in Central Ethiopia?",
+            "location": "Central Ethiopia",
             "crop_type": "maize"
         }
         chat_response = requests.post(f"{base_url}/api/v1/chat", json=chat_data)
@@ -45,7 +45,7 @@ def test_api():
         print("\n🧪 Testing Weather Advisor Agent...")
         weather_data = {
             "message": "Should I plant maize if heavy rain is forecast next week?",
-            "location": "Western Kenya", 
+            "location": "Western Ethiopia", 
             "crop_type": "maize"
         }
         weather_response = requests.post(f"{base_url}/api/v1/chat", json=weather_data)

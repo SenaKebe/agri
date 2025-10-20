@@ -1,21 +1,76 @@
-from fastapi import APIRouter, HTTPException, Query
-from app.models.schemas import ChatRequest, ChatResponse, AgentResponse, AgentType
-from app.workflows.weather_alert import weather_alert
+from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from app.models.schemas import ChatRequest, ChatResponse, AgentResponse, AgentType, UserCreate, UserLogin, Token
+from app.workflows.weather_alert import RealWeatherWorkflow , weather_alert # Assuming this is the weather workflow
 from app.agents.base import BaseAgent
 from typing import List, Dict, Any, Optional
 from app.rag.rag_manager import rag_manager
 from app.workflows.simple_weather import simple_weather
-
+from jose import jwt, JWTError
+from passlib.context import CryptContext
+from datetime import datetime, timedelta
 import logging
-from typing import List
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Security configurations
+SECRET_KEY = "your-secret-key-here"  # Replace with os.getenv("JWT_SECRET_KEY") for production
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# In-memory user store (replace with database later)
+fake_users_db = {}
+
+# OAuth2 scheme for token dependency
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def authenticate_user(email: str, password: str):
+    user = fake_users_db.get(email)
+    if not user or not verify_password(password, user["hashed_password"]):
+        return False
+    return user
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = fake_users_db.get(email)
+    if user is None:
+        raise credentials_exception
+    return user
 
 class AgronomistAgent(BaseAgent):
     def __init__(self):
-        system_prompt = """You are an expert agronomist specializing in maize cultivation in Kenya. 
+        system_prompt = """You are an expert agronomist specializing in maize cultivation in Ethiopia. 
         Provide practical, actionable advice for small-scale farmers. Focus on:
         - Planting timing and techniques
         - Soil preparation and fertilizer recommendations
@@ -23,19 +78,19 @@ class AgronomistAgent(BaseAgent):
         - Water management and irrigation
         - Harvesting and post-harvest handling
         
-        Be specific to Kenyan growing conditions and use simple, clear language."""
+        Be specific to Ethiopian growing conditions and use simple, clear language."""
         super().__init__("Agronomist", system_prompt)
 
 class WeatherAdvisorAgent(BaseAgent):
     def __init__(self):
-        system_prompt = """You are a weather advisor for farmers in Kenya. 
+        system_prompt = """You are a weather advisor for farmers in Ethiopia. 
         Provide weather-based agricultural recommendations focusing on:
         - Optimal planting windows based on rainfall patterns
         - Weather risk management (drought, heavy rain, storms)
         - Harvest timing considering weather forecasts
-        - Microclimate considerations for different Kenyan regions
+        - Microclimate considerations for different Ethiopian regions
         
-        Base your advice on typical Kenyan weather patterns and seasons."""
+        Base your advice on typical Ethiopian weather patterns and seasons."""
         super().__init__("Weather Advisor", system_prompt)
 
 class OrchestratorAgent:
@@ -44,36 +99,45 @@ class OrchestratorAgent:
         self.role = "Route queries to appropriate specialist agents"
         self.agronomist = AgronomistAgent()
         self.weather_advisor = WeatherAdvisorAgent()
-    
+        self.weather_workflow = RealWeatherWorkflow()  # Initialize weather workflow
+
     def analyze_query(self, query: str) -> List[AgentType]:
         """Determine which agents should handle this query"""
         query_lower = query.lower()
         agents_to_engage = []
         
-        # Simple rule-based routing
         agricultural_keywords = ['plant', 'crop', 'maize', 'fertilizer', 'pest', 'harvest', 'soil', 'seed', 'cultivation', 'yield']
         weather_keywords = ['weather', 'rain', 'forecast', 'dry', 'drought', 'storm', 'season', 'rainfall']
         
         if any(keyword in query_lower for keyword in agricultural_keywords):
             agents_to_engage.append(AgentType.AGRONOMIST)
-        
         if any(keyword in query_lower for keyword in weather_keywords):
             agents_to_engage.append(AgentType.WEATHER_ADVISOR)
-        
-        # If no specific agents matched, use agronomist as default
         if not agents_to_engage:
             agents_to_engage.append(AgentType.AGRONOMIST)
-            
         return agents_to_engage
-    
-    async def get_agent_response(self, agent_type: AgentType, query: str, context: str = "") -> AgentResponse:
-        """Get response from a specific agent with RAG context"""
+
+    async def get_agent_response(self, agent_type: AgentType, query: str, state: Dict) -> AgentResponse:
+        """Get response from a specific agent with shared state"""
         try:
-            # Get relevant agricultural knowledge from RAG
-            rag_context = rag_manager.get_agricultural_context(query)
-            full_context = f"{context}\n\nRelevant Agricultural Knowledge:\n{rag_context}"
-            
-            if agent_type == AgentType.AGRONOMIST:
+            context = state.get("context", "")
+            if agent_type == AgentType.WEATHER_ADVISOR:
+                # Fetch weather data and update state
+                location = state.get("location", "Central Ethiopia")
+                weather_data = self.weather_workflow.get_real_weather_data(location)
+                state["weather_data"] = weather_data  # Share weather data with other agents
+                response = await self.weather_advisor.generate_response(query, f"Weather Context: {weather_data}")
+                return AgentResponse(
+                    agent_type=AgentType.WEATHER_ADVISOR,
+                    response=response,
+                    confidence=0.80,
+                    sources=[{"type": "weather_api", "provider": "real_weather"}]
+                )
+            elif agent_type == AgentType.AGRONOMIST:
+                # Use weather data from state if available
+                weather_context = f"Weather: {state.get('weather_data', 'No weather data available')}" if "weather_data" in state else ""
+                rag_context = rag_manager.get_agricultural_context(query)
+                full_context = f"{weather_context}\n\nRelevant Agricultural Knowledge: {rag_context}"
                 response = await self.agronomist.generate_response(query, full_context)
                 return AgentResponse(
                     agent_type=AgentType.AGRONOMIST,
@@ -81,22 +145,14 @@ class OrchestratorAgent:
                     confidence=0.85,
                     sources=self._extract_sources_from_context(rag_context)
                 )
-            elif agent_type == AgentType.WEATHER_ADVISOR:
-                response = await self.weather_advisor.generate_response(query, full_context)
-                return AgentResponse(
-                    agent_type=AgentType.WEATHER_ADVISOR,
-                    response=response,
-                    confidence=0.80,
-                    sources=self._extract_sources_from_context(rag_context)
-                )
         except Exception as e:
-            logger.error(f"Error getting response from {agent_type}: {str(e)}")
+            logger.error(f"Error from {agent_type}: {str(e)}")
             return AgentResponse(
                 agent_type=agent_type,
                 response=f"The {agent_type.value} is currently unavailable. Please try again later.",
                 confidence=0.1
             )
-    
+
     def _extract_sources_from_context(self, rag_context: str) -> List[dict]:
         """Extract source information from RAG context"""
         sources = []
@@ -105,38 +161,58 @@ class OrchestratorAgent:
             for line in lines:
                 if line.startswith('From '):
                     source_name = line.split('From ')[1].split(' (relevance:')[0]
-                    sources.append({
-                        "type": "document",
-                        "name": source_name,
-                        "provider": "agricultural_knowledge_base"
-                    })
-        
+                    sources.append({"type": "document", "name": source_name, "provider": "agricultural_knowledge_base"})
         if not sources:
             sources.append({"type": "ai_model", "model": "Gemini Pro"})
-        
         return sources
-    
+
     def format_response(self, agent_responses: List[AgentResponse]) -> str:
-        """Combine agent responses into a coherent answer - FIXED METHOD"""
+        """Combine agent responses into a coherent answer"""
         if not agent_responses:
             return "I'm not sure how to help with that. Could you provide more details about your agricultural question?"
-        
         if len(agent_responses) == 1:
             return agent_responses[0].response
-        
-        # Combine responses from multiple agents
         combined = f"{agent_responses[0].response}\n\n"
         for i, agent_resp in enumerate(agent_responses[1:], 1):
             agent_type_name = agent_resp.agent_type.value.replace('_', ' ')
             combined += f"Additionally, from a {agent_type_name} perspective: {agent_resp.response}\n"
-        
         return combined
+
+# Initialize orchestrator
+orchestrator = OrchestratorAgent()
+
+@router.post("/register", response_model=Token)
+async def register(user: UserCreate):
+    """Register a new user"""
+    if user.email in fake_users_db:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed_password = get_password_hash(user.password)
+    fake_users_db[user.email] = {"name": user.name, "hashed_password": hashed_password}
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/login", response_model=Token)
+async def login(user: UserLogin):
+    """Login and get access token"""
+    if not user.email or not user.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    user_dict = fake_users_db.get(user.email)
+    if not user_dict or not verify_password(user.password, user_dict["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_advisor(request: ChatRequest):
-    """Main chat endpoint for agricultural advice"""
+    """Main chat endpoint for agricultural advice with agent communication"""
     try:
         logger.info(f"Chat request - Location: {request.location}, Crop: {request.crop_type}")
+        
+        # Initialize shared state
+        state = {
+            "context": f"Location: {request.location or 'Ethiopia'}, Crop: {request.crop_type or 'maize'}",
+            "location": request.location or "Central Ethiopia"
+        }
         
         agents_needed = orchestrator.analyze_query(request.message)
         logger.info(f"Agents needed: {agents_needed}")
@@ -144,14 +220,15 @@ async def chat_with_advisor(request: ChatRequest):
         agent_responses = []
         for agent_type in agents_needed:
             try:
-                context = f"Location: {request.location or 'Kenya'}, Crop: {request.crop_type or 'maize'}"
-                response = await orchestrator.get_agent_response(agent_type, request.message, context)
+                response = await orchestrator.get_agent_response(agent_type, request.message, state)
                 agent_responses.append(response)
+                # Update state with the latest response for subsequent agents
+                state["context"] += f"\n\nPrevious Response ({response.agent_type.value}): {response.response}"
             except Exception as agent_error:
                 logger.error(f"Error from {agent_type}: {str(agent_error)}")
                 agent_responses.append(AgentResponse(
                     agent_type=agent_type,
-                    response=f"The {agent_type.value} is temporarily unavailable.",
+                    response=f"The {agent_type.value} is currently unavailable.",
                     confidence=0.1
                 ))
         
@@ -168,7 +245,6 @@ async def chat_with_advisor(request: ChatRequest):
                 "Have you noticed any pests?"
             ]
         )
-        
     except Exception as e:
         logger.error(f"Chat endpoint error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -228,44 +304,16 @@ async def clear_rag():
 
 @router.post("/workflows/weather-alert")
 async def trigger_weather_alert(
-    location: str = Query("Central Kenya", description="Farm location"),
-    simulate_data: bool = Query(True, description="Use simulated weather data")
+    location: str = "Central Ethiopia",
+    use_real_weather: bool = True
 ):
-    """Trigger weather alert workflow"""
+    """Enhanced weather alert with real API data"""
     try:
-        if simulate_data:
-            weather_data = weather_alert.simulate_weather_data(location)
-        else:
-            # In production, you'd call a real weather API here
-            weather_data = {"condition": "unknown", "temperature": 25, "humidity": 60}
-        
-        result = weather_alert.generate_weather_alert(location, weather_data)
-        
-        return {
-            "workflow": "weather_alert",
-            "location": location,
-            "weather_data": weather_data,
-            "ai_advice": result,
-            "timestamp": "2024-01-01T00:00:00Z"  # In production, use actual timestamp
-        }
-        
-    except Exception as e:
-        logger.error(f"Weather alert workflow error: {e}")
-        raise HTTPException(status_code=500, detail=f"Workflow error: {str(e)}")
-@router.post("/workflows/simple-weather-alert")
-async def simple_weather_alert(location: str = "Central Kenya"):
-    """Simple weather alert endpoint that definitely works"""
-    try:
-        result = simple_weather.generate_weather_alert(location)
+        result = weather_alert.generate_weather_alert(location, use_real_weather)
         return result
     except Exception as e:
-        logger.error(f"Simple weather alert error: {e}")
-        return {
-            "success": False,
-            "error": str(e),
-            "workflow": "simple_weather_alert"
-        }
-    
+        logger.error(f"Weather alert error: {e}")
+        raise HTTPException(status_code=500, detail=f"Weather alert error: {str(e)}")    
 
 @router.get("/examples")
 async def get_example_questions():
@@ -273,7 +321,7 @@ async def get_example_questions():
     return {
         "example_questions": [
             {
-                "question": "When is the best time to plant maize in Central Kenya?",
+                "question": "When is the best time to plant maize in Central Ethiopia?",
                 "type": "planting_timing",
                 "expected_agents": ["agronomist"]
             },

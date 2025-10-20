@@ -50,7 +50,7 @@ def test_all_fastapi_endpoints():
                 elif endpoint == "/api/v1/rag/initialize":
                     response = requests.post(f"{base_url}{endpoint}", timeout=15)
                 elif endpoint == "/api/v1/workflows/weather-alert":
-                    response = requests.post(f"{base_url}{endpoint}?location=Central+Kenya", timeout=15)
+                    response = requests.post(f"{base_url}{endpoint}?location=Central+Ethiopia", timeout=15)
                 else:
                     response = requests.post(f"{base_url}{endpoint}", timeout=10)
             
@@ -80,25 +80,25 @@ def test_chat_with_different_questions():
     test_cases = [
         {
             "message": "Hello! What can you help me with?",
-            "location": "Central Kenya",
+            "location": "Central Ethiopia",
             "crop_type": "maize",
             "type": "greeting"
         },
         {
             "message": "When should I plant maize?",
-            "location": "Western Kenya", 
+            "location": "Western Ethiopia", 
             "crop_type": "maize",
             "type": "planting_timing"
         },
         {
             "message": "What about the weather for planting?",
-            "location": "Central Kenya",
+            "location": "Central Ethiopia",
             "crop_type": "maize", 
             "type": "weather_advice"
         },
         {
             "message": "How do I control pests in my maize farm?",
-            "location": "Eastern Kenya",
+            "location": "Eastern Ethiopia",
             "crop_type": "maize",
             "type": "pest_control"
         }

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 import logging
@@ -33,11 +33,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiter setup
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address, default_limits=["1000/day"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Health check endpoint
 @app.get("/")
 async def root():
     return {
-        "message": "AI Crop Advisor API is running", 
+        "message": "AI Crop Advisor API is running",
         "status": "healthy",
         "version": "1.0.0"
     }
@@ -45,15 +53,15 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {
-        "status": "healthy", 
+        "status": "healthy",
         "service": "AI Crop Advisor API",
-        "rag_initialized": False  # We'll update this later
+        "rag_initialized": False
     }
 
 # Import routers with error handling
 try:
-    from app.agents import orchestrator
-    app.include_router(orchestrator.router, prefix="/api/v1", tags=["AI Agents"])
+    from app.agents.orchestrator import router  # Ensure this matches your file structure
+    app.include_router(router, prefix="/api/v1", tags=["AI Agents"])
     logger.info("✅ Agents router loaded successfully")
 except Exception as e:
     logger.error(f"❌ Failed to load agents router: {e}")
@@ -61,7 +69,6 @@ except Exception as e:
 # Test imports endpoint
 @app.get("/test-imports")
 async def test_imports():
-    """Test if all components are imported correctly"""
     imports_status = {}
     
     try:
@@ -93,7 +100,6 @@ async def test_imports():
 # System info endpoint
 @app.get("/system/info")
 async def system_info():
-    """Get complete system information"""
     try:
         from app.rag.rag_manager import rag_manager
         
@@ -104,7 +110,7 @@ async def system_info():
             "version": "1.0.0",
             "components": {
                 "fastapi": "running",
-                "gemini_ai": "integrated", 
+                "gemini_ai": "integrated",
                 "rag_system": rag_status.get("status", "unknown"),
                 "multi_agent": "active",
                 "vector_database": "chromadb"
@@ -112,7 +118,7 @@ async def system_info():
             "rag_system": rag_status,
             "agents": ["agronomist", "weather_advisor", "orchestrator"],
             "supported_crops": ["maize", "beans", "wheat"],
-            "supported_regions": ["Central Kenya", "Western Kenya", "Eastern Kenya", "Rift Valley"]
+            "supported_regions": ["Central Ethiopia", "Western Ethiopia", "Eastern Ethiopia", "Rift Valley"]
         }
     except Exception as e:
         logger.error(f"Error getting system info: {e}")

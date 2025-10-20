@@ -59,7 +59,7 @@ def verify_success():
                 f"{base_url}/api/v1/chat",
                 json={
                     "message": question,
-                    "location": "Central Kenya", 
+                    "location": "Central Ethiopia", 
                     "crop_type": "maize"
                 },
                 timeout=15
