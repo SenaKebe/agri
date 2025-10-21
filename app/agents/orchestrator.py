@@ -11,13 +11,25 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import logging
 
+
+def get_mcp_router():
+    from app.mcp.mcp_adapter import router as mcp_router
+    return mcp_router
+
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+# Remove the import from top and add this function
+
+
+# Then where you include the router:
+mcp_router = get_mcp_router()
+router.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
 # Security configurations
 SECRET_KEY = "your-secret-key-here"  # Replace with os.getenv("JWT_SECRET_KEY") for production
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+WEATHER_ALERTS_FILE = "weather_alerts_log.json"
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -348,5 +360,213 @@ async def get_example_questions():
         ]
     }
 
+
+@router.post("/workflows/weather-alert-enhanced")
+async def enhanced_weather_alert(
+    location: str = "Central Ethiopia",
+    use_real_weather: bool = True
+):
+    """Enhanced weather alert with risk scoring for n8n"""
+    try:
+        # Get weather data
+        weather_result = weather_alert.generate_weather_alert(location, use_real_weather)
+        
+        # Calculate risk score and alert details
+        alert_analysis = analyze_weather_risk(weather_result, location)
+        
+        # Log the alert
+        log_weather_alert(alert_analysis)
+        
+        return {
+            "success": True,
+            "location": location,
+            "timestamp": datetime.now().isoformat(),
+            "weather_data": weather_result.get("weather_data", {}),
+            "alert_analysis": alert_analysis,
+            "risk_level": alert_analysis["risk_level"],
+            "risk_score": alert_analysis["risk_score"],
+            "recommendations": alert_analysis["recommendations"],
+            "farmer_impact": alert_analysis["farmer_impact"]
+        }
+        
+    except Exception as e:
+        logger.error(f"Enhanced weather alert error: {e}")
+        return {"success": False, "error": str(e)}
+
+def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[str, Any]:
+    """Analyze weather data and calculate risk score for Ethiopian agriculture"""
+    condition = weather_data.get("weather_data", {}).get("condition", "").lower()
+    temperature = weather_data.get("weather_data", {}).get("temperature", 25)
+    humidity = weather_data.get("weather_data", {}).get("humidity", 50)
+    
+    risk_score = 0
+    risk_level = "low"
+    farmer_impact = "Minimal impact on farming activities"
+    recommendations = ["Continue with regular farming schedule"]
+    
+    # Risk factors for Ethiopian agriculture
+    risk_factors = []
+    
+    # Temperature risks
+    if temperature > 35:
+        risk_score += 8
+        risk_factors.append("extreme_heat")
+        farmer_impact = "High risk of crop heat stress and water shortage"
+        recommendations = [
+            "🚰 Increase irrigation frequency",
+            "🌿 Apply mulch to retain soil moisture", 
+            "⛱️ Use shade nets for sensitive crops",
+            "💧 Water in early morning or late evening",
+            "🌾 Consider heat-resistant crop varieties"
+        ]
+    elif temperature < 10:
+        risk_score += 6
+        risk_factors.append("extreme_cold")
+        farmer_impact = "Risk of frost damage to crops and seedlings"
+        recommendations = [
+            "🧥 Cover seedlings overnight with cloth",
+            "⏰ Delay transplanting of sensitive crops",
+            "❄️ Use cold-resistant varieties",
+            "🍂 Apply organic mulch for insulation",
+            "🔥 Use smoke pots for frost protection (if available)"
+        ]
+    
+    # Precipitation risks
+    if any(term in condition for term in ["heavy rain", "storm", "thunderstorm"]):
+        risk_score += 9
+        risk_factors.append("heavy_rain")
+        farmer_impact = "High risk of soil erosion and planting delays"
+        recommendations = [
+            "⏳ Delay planting until rain subsides",
+            "💧 Ensure proper drainage in fields",
+            "🛡️ Protect stored grains from moisture",
+            "🌱 Check for soil erosion after rain",
+            "🚜 Avoid field work during heavy rain"
+        ]
+    elif "rain" in condition and "light" not in condition:
+        risk_score += 4
+        risk_factors.append("moderate_rain")
+        farmer_impact = "Good for crops but may delay some activities"
+        recommendations = [
+            "✅ Good time for planting if soil not waterlogged",
+            "💦 Reduce irrigation if rain is sufficient",
+            "🔍 Monitor for waterlogging in low areas"
+        ]
+    elif "dry" in condition or "drought" in condition:
+        risk_score += 7
+        risk_factors.append("drought_risk")
+        farmer_impact = "Crops at risk of water stress"
+        recommendations = [
+            "🚰 Schedule regular irrigation",
+            "💧 Use water conservation techniques",
+            "🌵 Consider drought-resistant crops",
+            "🍂 Apply mulch to reduce evaporation",
+            "⏰ Water during cooler parts of day"
+        ]
+    
+    # Humidity risks
+    if humidity > 80 and "rain" not in condition:
+        risk_score += 5
+        risk_factors.append("high_humidity")
+        farmer_impact = "Increased risk of fungal diseases"
+        recommendations = [
+            "🔍 Monitor for mildew and fungal diseases",
+            "💨 Ensure good air circulation around plants",
+            "🌿 Apply organic fungicides if needed",
+            "💦 Avoid overhead watering",
+            "✂️ Prune dense foliage for better airflow"
+        ]
+    elif humidity < 30:
+        risk_score += 3
+        risk_factors.append("low_humidity")
+        farmer_impact = "Increased water evaporation and plant stress"
+        recommendations = [
+            "💧 Increase irrigation frequency",
+            "🌿 Use mulch to conserve soil moisture",
+            "⛅ Consider shade for sensitive plants"
+        ]
+    
+    # Determine risk level
+    if risk_score >= 8:
+        risk_level = "high"
+    elif risk_score >= 5:
+        risk_level = "medium" 
+    else:
+        risk_level = "low"
+    
+    # Location-specific adjustments for Ethiopia
+    location_adjustments = {
+        "Central Ethiopia": "Moderate climate, watch for temperature extremes",
+        "Amhara Region": "Higher elevations, watch for cold temperatures",
+        "Oromia Region": "Diverse climates, monitor local conditions", 
+        "Southern Region": "Warmer climate, watch for drought",
+        "Tigray Region": "Arid conditions, focus on water management"
+    }
+    
+    location_note = location_adjustments.get(location, "Monitor local weather patterns")
+    
+    return {
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "risk_factors": risk_factors,
+        "farmer_impact": farmer_impact,
+        "recommendations": recommendations,
+        "location_note": location_note,
+        "condition": condition,
+        "temperature": temperature,
+        "humidity": humidity
+    }
+
+def log_weather_alert(alert_data: Dict[str, Any]):
+    """Log weather alerts for n8n and analytics"""
+    try:
+        alerts = []
+        if os.path.exists(WEATHER_ALERTS_FILE):
+            with open(WEATHER_ALERTS_FILE, 'r') as f:
+                alerts = json.load(f)
+        
+        alert_record = {
+            **alert_data,
+            "timestamp": datetime.now().isoformat(),
+            "alert_id": f"alert_{len(alerts) + 1}"
+        }
+        
+        alerts.append(alert_record)
+        
+        # Keep only last 1000 alerts
+        if len(alerts) > 1000:
+            alerts = alerts[-1000:]
+            
+        with open(WEATHER_ALERTS_FILE, 'w') as f:
+            json.dump(alerts, f, indent=2)
+            
+    except Exception as e:
+        logger.error(f"Error logging weather alert: {e}")
+
+@router.get("/alerts/recent")
+async def get_recent_alerts(hours: int = 24):
+    """Get recent weather alerts for n8n monitoring"""
+    try:
+        if not os.path.exists(WEATHER_ALERTS_FILE):
+            return {"alerts": []}
+            
+        with open(WEATHER_ALERTS_FILE, 'r') as f:
+            alerts = json.load(f)
+            
+        cutoff_time = datetime.now() - timedelta(hours=hours)
+        recent_alerts = [
+            alert for alert in alerts 
+            if datetime.fromisoformat(alert["timestamp"]) > cutoff_time
+        ]
+        
+        return {
+            "success": True,
+            "total_alerts": len(recent_alerts),
+            "high_risk_alerts": len([a for a in recent_alerts if a["risk_level"] == "high"]),
+            "alerts": recent_alerts[-10:]  # Last 10 alerts
+        }
+    except Exception as e:
+        logger.error(f"Error getting recent alerts: {e}")
+        return {"success": False, "error": str(e)}
 # Initialize orchestrator
-orchestrator = OrchestratorAgent()
+# orchestrator = OrchestratorAgent()

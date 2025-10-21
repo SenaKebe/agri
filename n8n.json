@@ -1,0 +1,64 @@
+{
+  "name": "Ethiopia Weather Alerts",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": 360,
+          "timeUnit": "minutes"
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://api.openweathermap.org/data/2.5/forecast?q=Addis Ababa,ET&appid=YOUR_API_KEY&units=metric"
+      },
+      "name": "Get Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst forecasts = data.list.slice(0, 8);\nconst city = data.city.name;\n\nlet alerts = [];\nfor (const entry of forecasts) {\n  const temp = entry.main.temp;\n  const weather = entry.weather[0].description;\n  const date = entry.dt_txt;\n  \n  let risk = \"Low\";\n  if (weather.includes(\"rain\") || temp > 30) risk = \"High\";\n  \n  alerts.push({ date, city, condition: weather, temperature: temp, risk });\n}\nreturn alerts.map(a => ({ json: a }));"
+      },
+      "name": "Process Data",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.risk }}",
+              "rightValue": "High",
+              "operator": "equal"
+            }
+          ]
+        }
+      },
+      "name": "Filter High Risk",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "botToken": "YOUR_BOT_TOKEN",
+        "chatId": "YOUR_CHAT_ID",
+        "text": "Weather Alert for {{ $json.city }}! Condition: {{ $json.condition }}, Temp: {{ $json.temperature }}°C"
+      },
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ]
+}

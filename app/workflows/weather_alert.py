@@ -160,7 +160,7 @@ class RealWeatherWorkflow:
 
 **KEY FOCUS**: Practical, affordable solutions for small-scale farmers. Consider soil moisture, pest activity, and growth stages.
 
-**RESPONSE FORMAT**: Use clear, simple language with bullet points."""
+**RESPONSE FORMAT**: Use clear, simple language with bullet points remove starts that are here."""
 
             logger.info(f"Generating weather advice for {location} with {condition} at {temperature}°C")
             response = self.gemini_client.generate_content(prompt)

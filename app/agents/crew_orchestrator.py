@@ -76,3 +76,4 @@ async def chat_with_advisor(request: ChatRequest) -> Dict:
         "weather_data": getattr(weather_agent, "last_output", "No weather data available"),
         "agronomist_advice": getattr(advice_task, "last_output", "No agronomist advice available")
     }
+    
