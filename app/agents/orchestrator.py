@@ -10,6 +10,8 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 import logging
+import os
+import dotenv
 
 
 def get_mcp_router():
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 mcp_router = get_mcp_router()
 router.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
 # Security configurations
-SECRET_KEY = "your-secret-key-here"  # Replace with os.getenv("JWT_SECRET_KEY") for production
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 WEATHER_ALERTS_FILE = "weather_alerts_log.json"
