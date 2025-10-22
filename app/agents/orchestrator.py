@@ -21,25 +21,19 @@ def get_mcp_router():
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Remove the import from top and add this function
 
 
-# Then where you include the router:
 mcp_router = get_mcp_router()
 router.include_router(mcp_router, prefix="/mcp", tags=["mcp"])
-# Security configurations
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 WEATHER_ALERTS_FILE = "weather_alerts_log.json"
 
-# Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# In-memory user store (replace with database later)
 fake_users_db = {}
 
-# OAuth2 scheme for token dependency
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def verify_password(plain_password, hashed_password):
@@ -113,7 +107,7 @@ class OrchestratorAgent:
         self.role = "Route queries to appropriate specialist agents"
         self.agronomist = AgronomistAgent()
         self.weather_advisor = WeatherAdvisorAgent()
-        self.weather_workflow = RealWeatherWorkflow()  # Initialize weather workflow
+        self.weather_workflow = RealWeatherWorkflow()  
 
     def analyze_query(self, query: str) -> List[AgentType]:
         """Determine which agents should handle this query"""
@@ -136,10 +130,9 @@ class OrchestratorAgent:
         try:
             context = state.get("context", "")
             if agent_type == AgentType.WEATHER_ADVISOR:
-                # Fetch weather data and update state
                 location = state.get("location", "Central Ethiopia")
                 weather_data = self.weather_workflow.get_real_weather_data(location)
-                state["weather_data"] = weather_data  # Share weather data with other agents
+                state["weather_data"] = weather_data  
                 response = await self.weather_advisor.generate_response(query, f"Weather Context: {weather_data}")
                 return AgentResponse(
                     agent_type=AgentType.WEATHER_ADVISOR,
@@ -148,7 +141,6 @@ class OrchestratorAgent:
                     sources=[{"type": "weather_api", "provider": "real_weather"}]
                 )
             elif agent_type == AgentType.AGRONOMIST:
-                # Use weather data from state if available
                 weather_context = f"Weather: {state.get('weather_data', 'No weather data available')}" if "weather_data" in state else ""
                 rag_context = rag_manager.get_agricultural_context(query)
                 full_context = f"{weather_context}\n\nRelevant Agricultural Knowledge: {rag_context}"
@@ -192,7 +184,7 @@ class OrchestratorAgent:
             combined += f"Additionally, from a {agent_type_name} perspective: {agent_resp.response}\n"
         return combined
 
-# Initialize orchestrator
+
 orchestrator = OrchestratorAgent()
 
 @router.post("/register", response_model=Token)
@@ -222,7 +214,6 @@ async def chat_with_advisor(request: ChatRequest):
     try:
         logger.info(f"Chat request - Location: {request.location}, Crop: {request.crop_type}")
         
-        # Initialize shared state
         state = {
             "context": f"Location: {request.location or 'Ethiopia'}, Crop: {request.crop_type or 'maize'}",
             "location": request.location or "Central Ethiopia"
@@ -236,7 +227,6 @@ async def chat_with_advisor(request: ChatRequest):
             try:
                 response = await orchestrator.get_agent_response(agent_type, request.message, state)
                 agent_responses.append(response)
-                # Update state with the latest response for subsequent agents
                 state["context"] += f"\n\nPrevious Response ({response.agent_type.value}): {response.response}"
             except Exception as agent_error:
                 logger.error(f"Error from {agent_type}: {str(agent_error)}")
@@ -370,13 +360,10 @@ async def enhanced_weather_alert(
 ):
     """Enhanced weather alert with risk scoring for n8n"""
     try:
-        # Get weather data
         weather_result = weather_alert.generate_weather_alert(location, use_real_weather)
         
-        # Calculate risk score and alert details
         alert_analysis = analyze_weather_risk(weather_result, location)
         
-        # Log the alert
         log_weather_alert(alert_analysis)
         
         return {
@@ -406,10 +393,8 @@ def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[st
     farmer_impact = "Minimal impact on farming activities"
     recommendations = ["Continue with regular farming schedule"]
     
-    # Risk factors for Ethiopian agriculture
     risk_factors = []
     
-    # Temperature risks
     if temperature > 35:
         risk_score += 8
         risk_factors.append("extreme_heat")
@@ -433,7 +418,6 @@ def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[st
             "🔥 Use smoke pots for frost protection (if available)"
         ]
     
-    # Precipitation risks
     if any(term in condition for term in ["heavy rain", "storm", "thunderstorm"]):
         risk_score += 9
         risk_factors.append("heavy_rain")
@@ -466,7 +450,6 @@ def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[st
             "⏰ Water during cooler parts of day"
         ]
     
-    # Humidity risks
     if humidity > 80 and "rain" not in condition:
         risk_score += 5
         risk_factors.append("high_humidity")
@@ -488,7 +471,6 @@ def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[st
             "⛅ Consider shade for sensitive plants"
         ]
     
-    # Determine risk level
     if risk_score >= 8:
         risk_level = "high"
     elif risk_score >= 5:
@@ -496,7 +478,6 @@ def analyze_weather_risk(weather_data: Dict[str, Any], location: str) -> Dict[st
     else:
         risk_level = "low"
     
-    # Location-specific adjustments for Ethiopia
     location_adjustments = {
         "Central Ethiopia": "Moderate climate, watch for temperature extremes",
         "Amhara Region": "Higher elevations, watch for cold temperatures",
@@ -535,7 +516,6 @@ def log_weather_alert(alert_data: Dict[str, Any]):
         
         alerts.append(alert_record)
         
-        # Keep only last 1000 alerts
         if len(alerts) > 1000:
             alerts = alerts[-1000:]
             
@@ -570,5 +550,3 @@ async def get_recent_alerts(hours: int = 24):
     except Exception as e:
         logger.error(f"Error getting recent alerts: {e}")
         return {"success": False, "error": str(e)}
-# Initialize orchestrator
-# orchestrator = OrchestratorAgent()
